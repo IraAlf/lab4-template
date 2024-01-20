@@ -1,25 +1,66 @@
 name: GitHub Classroom Workflow
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 jobs:
+
   build:
-    name: Autograding
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Build images
+        timeout-minutes: 10
+        run: docker compose build
+
+      - name: Docker Hub login
+        env:
+          CRYANDEX_PASSWORD: ${{ secrets.CRYANDEX_PASSWORD }}
+        run: echo "$CRYANDEX_PASSWORD" | docker login -u oauth --password-stdin cr.yandex
+
+      - name: Docker Publish
+        run: docker compose push
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Prepare Kube config
+        env:
+          KUBECONFIG_FILE: '${{ secrets.KUBECONFIG }}'
+          KUBECONFIG_CA_FILE: '${{ secrets.KUBECONFIG_CA }}'
+        run: |
+          echo "$KUBECONFIG_FILE" > ./kube.config 
+          echo "$KUBECONFIG_CA_FILE" > ./ca.pem 
+
+      - name: 'App deploy'
+        env:
+          POSTGRES_PASSWORD: 'test'
+        run: |
+          export HELM_OPERATION=install
+          helm --kubeconfig ./kube.config status my-app
+          if [ $? -eq 0 ]
+            then HELM_OPERATION=upgrade
+          fi
+          helm --kubeconfig ./kube.config $HELM_OPERATION my-app ./k8s/my-app
+        uses: matt-ball/newman-action@master
         with:
-          fetch-depth: 0
-
-      - uses: docker/setup-buildx-action@v2
-
-      # TODO build, publish to docker hub, deploy to k8s
+          collection: v1/postman/collection.json
+          environment: v1/postman/environment.json
+          delayRequest: 100
+          reporters: '[ "cli" ]'
 
       - name: Run API Tests
         uses: matt-ball/newman-action@master
         with:
-          collection: <variant>/postman/collection.json
-          environment: <variant>/postman/environment.json
+          # TODO insert your variant
+          collection: v1/postman/collection.json
+          environment: v1/postman/environment.json
           delayRequest: 100
           reporters: '[ "cli" ]'
 
@@ -32,7 +73,12 @@ jobs:
         with:
           google_token: ${{secrets.GOOGLE_API_KEY}}
           sheet_id: "1xkgjUX6Qmk7rdJG-QPOToav-HWWtthJjnShIKnw3oIY"
-          homework_number: 4
+          homework_number: 2
           user_column: 'D'
           column_offset: 'F'
           mark: "'+"
+
+      - name: Stop containers
+        if: always()
+        continue-on-error: true
+        run: docker compose down -v
