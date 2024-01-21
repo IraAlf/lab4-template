@@ -38,11 +38,11 @@ jobs:
           echo "$KUBECONFIG_FILE" > ./kube.config
           echo "$KUBECONFIG_CA_FILE" > ./ca.pem
 
-      - name: 'App deploy'
+#      - name: 'App deploy'
 #        env:
 #          POSTGRES_PASSWORD: 'test'
-        run: |
-           helm upgrade lab4app k8s/my-app
+#        run: |
+#           helm upgrade lab4app k8s/my-app
 #          export HELM_OPERATION=install
 #          helm --kubeconfig ./kube.config status my-app
 #          if [ $? -eq 0 ]
